@@ -9,10 +9,9 @@ on:
       - master
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
-    container: golang:1.23
+    container: golang:1.22
 
     services:
       postgres:
