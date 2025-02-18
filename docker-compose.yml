@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: gophermart
+      POSTGRES_PASSWORD: gophermart
+      POSTGRES_DB: gophermart
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gophermart-network
+
+  accrual:
+    build:
+      context: .
+      dockerfile: Dockerfile.accrual
+    container_name: accrual
+    environment:
+      - ACCRUAL_RUN_ADDRESS=${ACCRUAL_RUN_ADDRESS}
+      - ACCRUAL_DATABASE_URI=${ACCRUAL_DATABASE_URI}
+    depends_on:
+      - postgres
+    networks:
+      - gophermart-network
+
+  gophermart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gophermart
+    environment:
+      - RUN_ADDRESS=${RUN_ADDRESS}
+      - DATABASE_URI=${DATABASE_URI}
+      - ACCRUAL_SYSTEM_ADDRESS=${ACCRUAL_SYSTEM_ADDRESS}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - accrual
+    networks:
+      - gophermart-network
+
+  swissknife:
+    build:
+      context: .
+      dockerfile: Dockerfile.swissknife
+    container_name: swissknife
+    depends_on:
+      - accrual
+      - gophermart
+    networks:
+      - gophermart-network
+
+volumes:
+  postgres_data:
+
+networks:
+  gophermart-network:
+    driver: bridge

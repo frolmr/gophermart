@@ -1,0 +1,8 @@
+FROM alpine:3.21
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+WORKDIR /home/appuser
+COPY --chown=appuser:appgroup cmd/accrual/accrual_linux_amd64 .
+RUN apk add --no-cache libc6-compat
+USER appuser
+EXPOSE 8080
+CMD ["./accrual_linux_amd64", "-d", "${ACCRUAL_DATABASE_URI}"]

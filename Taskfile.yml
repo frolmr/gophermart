@@ -64,3 +64,18 @@ tasks:
     cmds:
       - go test -v ./... --count=1
     silent: true
+  up:
+    desc: Run app suite in containers
+    cmds:
+      - docker-compose up --build --detach
+    silent: true
+  down:
+    desc: Stop app suite
+    cmds:
+      - docker-compose down
+    silent: true
+  swissknife:
+    desc: Get in swissknife container
+    cmds:
+      - docker-compose exec swissknife sh
+    silent: true

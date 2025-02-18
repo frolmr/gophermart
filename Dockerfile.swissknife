@@ -1,0 +1,14 @@
+FROM alpine:3.21
+
+RUN apk add --no-cache \
+  curl \
+  wget \
+  bind-tools \ 
+  iputils \     
+  net-tools \  
+  tcpdump \   
+  busybox-extras
+
+WORKDIR /root/
+
+CMD ["sleep", "infinity"]
