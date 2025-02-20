@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/frolmr/gophermart/internal/domain"
+	"github.com/frolmr/gophermart/pkg/formatter"
 	"github.com/frolmr/gophermart/pkg/luhn"
 	"go.uber.org/zap"
 )
@@ -17,8 +17,8 @@ const (
 
 type OrdersRepository interface {
 	FindOrderByNumber(number string) (*domain.DBOrder, error)
-	GetAllUserOrders(userID int) ([]*domain.Order, error)
-	CreateOrder(number string, userID int) error
+	GetAllUserOrders(userID int64) ([]*domain.Order, error)
+	CreateOrder(number string, userID int64) error
 }
 
 type OrdersHandler struct {
@@ -49,7 +49,7 @@ func (oh *OrdersHandler) LoadOrder(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	userID, err := strconv.Atoi(req.Header.Get(domain.UserIDHeader))
+	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
 		http.Error(w, "Invalid user id", http.StatusInternalServerError)
 		return
@@ -83,7 +83,7 @@ func (oh *OrdersHandler) LoadOrder(w http.ResponseWriter, req *http.Request) {
 //nolint:dupl // Actually code is not the same as in ordes_handler. United code will be more difficult to understand
 func (oh *OrdersHandler) GetOrders(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", domain.JSONContentType)
-	userID, err := strconv.Atoi(req.Header.Get(domain.UserIDHeader))
+	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
 		http.Error(w, "Invalid user id", http.StatusInternalServerError)
 		return

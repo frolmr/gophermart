@@ -12,7 +12,7 @@ import (
 func TestCreateOrderAccrual_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	orderID := 1
+	orderID := int64(1)
 	value := 50.0
 	accrualInSubunit := formatter.ConvertToSubunit(value)
 
@@ -29,7 +29,7 @@ func TestCreateOrderAccrual_Success(t *testing.T) {
 func TestCreateOrderAccrual_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	orderID := 1
+	orderID := int64(1)
 	value := 50.0
 	accrualInSubunit := formatter.ConvertToSubunit(value)
 
@@ -45,8 +45,8 @@ func TestCreateOrderAccrual_DatabaseError(t *testing.T) {
 func TestGetUserAccrualsSum_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
-	totalAccruals := 10000
+	userID := int64(1)
+	totalAccruals := int64(10000)
 
 	rows := sqlmock.NewRows([]string{"total_accruals"}).
 		AddRow(totalAccruals)
@@ -69,8 +69,8 @@ func TestGetUserAccrualsSum_Success(t *testing.T) {
 func TestGetUserAccrualsSum_NoData(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
-	totalAccruals := 0
+	userID := int64(1)
+	totalAccruals := int64(0)
 
 	rows := sqlmock.NewRows([]string{"total_accruals"}).
 		AddRow(totalAccruals)
@@ -93,7 +93,7 @@ func TestGetUserAccrualsSum_NoData(t *testing.T) {
 func TestGetUserAccrualsSum_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectQuery(`
 			SELECT COALESCE\(SUM\(accrual\), 0\) AS total_accruals

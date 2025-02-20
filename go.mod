@@ -11,6 +11,7 @@ require (
 	github.com/jarcoal/httpmock v1.3.1
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/stretchr/testify v1.10.0
+	go.uber.org/mock v0.5.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.31.0
 )

@@ -1,85 +1,96 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/frolmr/gophermart/internal/domain"
 	"github.com/frolmr/gophermart/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 )
 
-func TestGetBalance(t *testing.T) {
-	mockRepo := &mocks.MockBalanceRepository{
-		GetUserCurrentBalanceFunc: func(userID int) (float64, error) {
-			return 100.50, nil
+func TestBalancesHandler_GetBalance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockBalanceRepository(ctrl)
+	logger := zap.NewNop().Sugar()
+	handler := NewBalancesHandler(logger, mockRepo)
+
+	tests := []struct {
+		name           string
+		userID         string
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:   "Successful balance retrieval",
+			userID: "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetUserCurrentBalance(int64(1)).
+					Return(100.5, nil)
+
+				mockRepo.EXPECT().
+					GetUserWithdrawalsSum(int64(1)).
+					Return(50.25, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   `{"current":100.5,"withdrawn":50.25}`,
 		},
-		GetUserWithdrawalsSumFunc: func(userID int) (float64, error) {
-			return 30.25, nil
+		{
+			name:   "Failed to get user current balance",
+			userID: "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetUserCurrentBalance(int64(1)).
+					Return(0.0, assert.AnError)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   `{"error":"Failed to get user accrual sum"}`,
+		},
+		{
+			name:   "Failed to get user withdrawals sum",
+			userID: "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetUserCurrentBalance(int64(1)).
+					Return(100.5, nil)
+
+				mockRepo.EXPECT().
+					GetUserWithdrawalsSum(int64(1)).
+					Return(0.0, assert.AnError)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   `{"error":"Failed to get user withdrawal sum"}`,
+		},
+		{
+			name:           "Invalid user ID",
+			userID:         "invalid",
+			mockSetup:      func() {},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   `{"error":"Invalid user id"}`,
 		},
 	}
 
-	logger := zap.NewNop().Sugar()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
 
-	handler := NewBalancesHandler(logger, mockRepo)
+			req := httptest.NewRequest(http.MethodGet, "/balance", nil)
+			req.Header.Set(domain.UserIDHeader, tt.userID)
+			w := httptest.NewRecorder()
 
-	req := httptest.NewRequest(http.MethodGet, "/balance", nil)
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
+			handler.GetBalance(w, req)
 
-	rr := httptest.NewRecorder()
-
-	handler.GetBalance(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-
-	var balance domain.Balance
-	err := json.NewDecoder(rr.Body).Decode(&balance)
-	assert.NoError(t, err)
-
-	assert.Equal(t, 100.50, balance.BalanceSum)
-	assert.Equal(t, 30.25, balance.WithdrawalSum)
-}
-
-func TestGetBalance_InvalidUserID(t *testing.T) {
-	mockRepo := &mocks.MockBalanceRepository{}
-
-	logger := zap.NewNop().Sugar()
-
-	handler := NewBalancesHandler(logger, mockRepo)
-
-	req := httptest.NewRequest(http.MethodGet, "/balance", nil)
-	req.Header.Set(domain.UserIDHeader, "invalid")
-
-	rr := httptest.NewRecorder()
-
-	handler.GetBalance(rr, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
-}
-
-func TestGetBalance_RepositoryError(t *testing.T) {
-	mockRepo := &mocks.MockBalanceRepository{
-		GetUserCurrentBalanceFunc: func(userID int) (float64, error) {
-			return 0, assert.AnError
-		},
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if tt.expectedBody != "" {
+				assert.JSONEq(t, tt.expectedBody, w.Body.String())
+			}
+		})
 	}
-
-	logger := zap.NewNop().Sugar()
-
-	handler := NewBalancesHandler(logger, mockRepo)
-
-	req := httptest.NewRequest(http.MethodGet, "/balance", nil)
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
-
-	rr := httptest.NewRecorder()
-
-	handler.GetBalance(rr, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 }

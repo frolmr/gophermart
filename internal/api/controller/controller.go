@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"fmt"
+
 	"github.com/frolmr/gophermart/internal/api/handlers"
 	mw "github.com/frolmr/gophermart/internal/api/middleware"
 	"github.com/frolmr/gophermart/internal/config"
@@ -19,7 +21,7 @@ type Controller struct {
 func NewController(stor *storage.Storage) (*Controller, error) {
 	authCfg, err := config.NewAuthConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error constructing controller: %w", err)
 	}
 
 	return &Controller{

@@ -9,5 +9,5 @@ CREATE TABLE users (
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE users;
+DROP TABLE IF EXISTS users;
 -- +goose StatementEnd

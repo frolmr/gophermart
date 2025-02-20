@@ -12,9 +12,9 @@ import (
 func TestGetUserCurrentBalance_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
-	totalAccruals := 10000
-	totalWithdrawals := 3000
+	userID := int64(1)
+	totalAccruals := int64(10000)
+	totalWithdrawals := int64(3000)
 	netDifference := totalAccruals - totalWithdrawals
 
 	rows := sqlmock.NewRows([]string{"net_difference"}).
@@ -49,8 +49,8 @@ func TestGetUserCurrentBalance_Success(t *testing.T) {
 func TestGetUserCurrentBalance_NoData(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
-	netDifference := 0
+	userID := int64(1)
+	netDifference := int64(0)
 
 	rows := sqlmock.NewRows([]string{"net_difference"}).
 		AddRow(netDifference)
@@ -84,7 +84,7 @@ func TestGetUserCurrentBalance_NoData(t *testing.T) {
 func TestGetUserCurrentBalance_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectQuery(`
             WITH accruals_cte AS \(

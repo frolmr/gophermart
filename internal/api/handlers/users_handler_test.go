@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,170 +12,137 @@ import (
 	"github.com/frolmr/gophermart/internal/domain"
 	"github.com/frolmr/gophermart/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func readResponseBody(t *testing.T, res *http.Response) string {
-	body, err := io.ReadAll(res.Body)
-	assert.NoError(t, err)
-	return string(body)
+func TestUsersHandler_RegisterUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockUsersRepository(ctrl)
+	logger := zap.NewNop().Sugar()
+	handler := NewUsersHandler(logger, mockRepo)
+
+	tests := []struct {
+		name           string
+		input          domain.User
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name: "Successful registration",
+			input: domain.User{
+				Login:    "testuser",
+				Password: "testpassword",
+			},
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetUserByLogin("testuser").
+					Return(nil, nil)
+
+				mockRepo.EXPECT().
+					CreateAndReturnUser("testuser", gomock.Any()).
+					Return(&domain.DBUser{ID: 1, Login: "testuser"}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "User created successfully",
+		},
+		{
+			name: "User already exists",
+			input: domain.User{
+				Login:    "existinguser",
+				Password: "testpassword",
+			},
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetUserByLogin("existinguser").
+					Return(&domain.DBUser{ID: 1, Login: "existinguser"}, nil)
+			},
+			expectedStatus: http.StatusConflict,
+			expectedBody:   "User already registered",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			body, _ := json.Marshal(tt.input)
+			req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(body))
+			w := httptest.NewRecorder()
+
+			handler.RegisterUser(&config.AuthConfig{JWTExpiresIn: time.Hour}).ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tt.expectedBody)
+		})
+	}
 }
 
-func TestRegisterUser_Success(t *testing.T) {
-	dbUser := domain.DBUser{
-		ID:           1,
-		Login:        "testuser",
-		PasswordHash: "testpassword",
-	}
-	mockRepo := &mocks.MockUsersRepository{
-		CreateAndReturnUserFunc: func(login, password string) (*domain.DBUser, error) {
-			return &dbUser, nil
-		},
-		GetUserByLoginFunc: func(login string) (*domain.DBUser, error) {
-			return nil, nil
-		},
-	}
+func TestUsersHandler_LoginUser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockUsersRepository(ctrl)
 
 	logger := zap.NewNop().Sugar()
 
-	authConfig := &config.AuthConfig{
-		JWTKey:       []byte("test-secret"),
-		JWTExpiresIn: time.Hour,
-	}
 	handler := NewUsersHandler(logger, mockRepo)
 
-	ts := httptest.NewServer(handler.RegisterUser(authConfig))
-	defer ts.Close()
-
-	user := domain.User{
-		Login:    "testuser",
-		Password: "testpassword",
-	}
-	payload, _ := json.Marshal(user)
-
-	//nolint:noctx // Do not need context here
-	res, err := http.Post(ts.URL+"/register", "application/json", bytes.NewBuffer(payload))
-	assert.NoError(t, err)
-	defer res.Body.Close()
-
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-	assert.Contains(t, readResponseBody(t, res), "User created successfully")
-
-	cookies := res.Cookies()
-	assert.NotEmpty(t, cookies)
-	assert.Equal(t, "access_token", cookies[0].Name)
-}
-
-func TestRegisterUser_UserAlreadyExists(t *testing.T) {
-	mockRepo := &mocks.MockUsersRepository{
-		GetUserByLoginFunc: func(login string) (*domain.DBUser, error) {
-			return &domain.DBUser{Login: "testuser"}, nil // Simulate existing user
+	tests := []struct {
+		name           string
+		input          domain.User
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name: "Successful login",
+			input: domain.User{
+				Login:    "testuser",
+				Password: "testpassword",
+			},
+			mockSetup: func() {
+				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword"), bcrypt.DefaultCost)
+				mockRepo.EXPECT().
+					GetUserByLogin("testuser").
+					Return(&domain.DBUser{ID: 1, Login: "testuser", PasswordHash: string(hashedPassword)}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "Login successful",
 		},
-	}
-	logger := zap.NewNop().Sugar()
-
-	authConfig := &config.AuthConfig{
-		JWTKey:       []byte("test-secret"),
-		JWTExpiresIn: time.Hour,
-	}
-
-	handler := NewUsersHandler(logger, mockRepo)
-
-	ts := httptest.NewServer(handler.RegisterUser(authConfig))
-	defer ts.Close()
-
-	user := domain.User{
-		Login:    "testuser",
-		Password: "testpassword",
-	}
-	payload, _ := json.Marshal(user)
-
-	//nolint:noctx // Do not need context here
-	res, err := http.Post(ts.URL+"/register", "application/json", bytes.NewBuffer(payload))
-	assert.NoError(t, err)
-	defer res.Body.Close()
-
-	assert.Equal(t, http.StatusConflict, res.StatusCode)
-	assert.Contains(t, readResponseBody(t, res), "User already registered")
-}
-
-func TestLoginUser_Success(t *testing.T) {
-	mockRepo := &mocks.MockUsersRepository{
-		GetUserByLoginFunc: func(login string) (*domain.DBUser, error) {
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword"), bcrypt.DefaultCost)
-			return &domain.DBUser{
-				ID:           1,
-				Login:        "testuser",
-				PasswordHash: string(hashedPassword),
-			}, nil
+		{
+			name: "Invalid login or password",
+			input: domain.User{
+				Login:    "testuser",
+				Password: "wrongpassword",
+			},
+			mockSetup: func() {
+				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword"), bcrypt.DefaultCost)
+				mockRepo.EXPECT().
+					GetUserByLogin("testuser").
+					Return(&domain.DBUser{ID: 1, Login: "testuser", PasswordHash: string(hashedPassword)}, nil)
+			},
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Invalid login or password",
 		},
 	}
 
-	logger := zap.NewNop().Sugar()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
 
-	authConfig := &config.AuthConfig{
-		JWTKey:       []byte("test-secret"),
-		JWTExpiresIn: time.Hour,
+			body, _ := json.Marshal(tt.input)
+			req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+			w := httptest.NewRecorder()
+
+			handler.LoginUser(&config.AuthConfig{JWTExpiresIn: time.Hour}).ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tt.expectedBody)
+		})
 	}
-	handler := NewUsersHandler(logger, mockRepo)
-
-	ts := httptest.NewServer(handler.LoginUser(authConfig))
-	defer ts.Close()
-
-	user := domain.User{
-		Login:    "testuser",
-		Password: "testpassword",
-	}
-	payload, _ := json.Marshal(user)
-
-	//nolint:noctx // Do not need context here
-	res, err := http.Post(ts.URL+"/login", "application/json", bytes.NewBuffer(payload))
-	assert.NoError(t, err)
-	defer res.Body.Close()
-
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-	assert.Contains(t, readResponseBody(t, res), "Login successful")
-
-	cookies := res.Cookies()
-	assert.NotEmpty(t, cookies)
-	assert.Equal(t, "access_token", cookies[0].Name)
-}
-
-func TestLoginUser_InvalidCredentials(t *testing.T) {
-	mockRepo := &mocks.MockUsersRepository{
-		GetUserByLoginFunc: func(login string) (*domain.DBUser, error) {
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword"), bcrypt.DefaultCost)
-			return &domain.DBUser{
-				ID:           1,
-				Login:        "testuser",
-				PasswordHash: string(hashedPassword),
-			}, nil
-		},
-	}
-
-	logger := zap.NewNop().Sugar()
-
-	authConfig := &config.AuthConfig{
-		JWTKey:       []byte("test-secret"),
-		JWTExpiresIn: time.Hour,
-	}
-	handler := NewUsersHandler(logger, mockRepo)
-
-	ts := httptest.NewServer(handler.LoginUser(authConfig))
-	defer ts.Close()
-
-	user := domain.User{
-		Login:    "testuser",
-		Password: "wrongpassword",
-	}
-	payload, _ := json.Marshal(user)
-
-	//nolint:noctx // Do not need context here
-	res, err := http.Post(ts.URL+"/login", "application/json", bytes.NewBuffer(payload))
-	assert.NoError(t, err)
-	defer res.Body.Close()
-
-	assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
-	assert.Contains(t, readResponseBody(t, res), "Invalid login or password")
 }

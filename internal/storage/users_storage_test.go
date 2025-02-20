@@ -47,7 +47,7 @@ func TestCreateAndReturnUser_Success(t *testing.T) {
 	login := "testuser"
 	password := "testpassword"
 	hashedPassword := "hashedpassword"
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectPrepare("INSERT INTO users").
 		ExpectQuery().
@@ -88,7 +88,7 @@ func TestGetUserByLogin_Success(t *testing.T) {
 
 	login := "testuser"
 	hashedPassword := "hashedpassword"
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectPrepare("SELECT id, login, password_hash FROM users").
 		ExpectQuery().

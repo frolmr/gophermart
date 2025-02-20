@@ -15,7 +15,7 @@ func TestCreateWithdrawal_Success(t *testing.T) {
 
 	orderNumber := "12345678903"
 	sum := 50.0
-	userID := 1
+	userID := int64(1)
 	sumInSubunit := int(sum * domain.ToSubunitDelimeter)
 
 	mock.ExpectExec("INSERT INTO withdrawals").
@@ -33,7 +33,7 @@ func TestCreateWithdrawal_DatabaseError(t *testing.T) {
 
 	orderNumber := "12345678903"
 	sum := 50.0
-	userID := 1
+	userID := int64(1)
 	sumInSubunit := int(sum * domain.ToSubunitDelimeter)
 
 	mock.ExpectExec("INSERT INTO withdrawals").
@@ -49,7 +49,7 @@ func TestCreateWithdrawal_DatabaseError(t *testing.T) {
 func TestGetAllUserWithdrawals_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 	processedAt := time.Now()
 	withdrawals := []*domain.Withdrawal{
 		{Order: "12345678903", Sum: 50.0, ProcessedAt: processedAt},
@@ -75,7 +75,7 @@ func TestGetAllUserWithdrawals_Success(t *testing.T) {
 func TestGetAllUserWithdrawals_NoWithdrawals(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	rows := sqlmock.NewRows([]string{"order_number", "sum", "processed_at"})
 
@@ -94,7 +94,7 @@ func TestGetAllUserWithdrawals_NoWithdrawals(t *testing.T) {
 func TestGetAllUserWithdrawals_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectPrepare("SELECT order_number, sum, processed_at FROM withdrawals").
 		ExpectQuery().
@@ -111,7 +111,7 @@ func TestGetAllUserWithdrawals_DatabaseError(t *testing.T) {
 func TestGetUserWithdrawalsSum_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 	totalWithdrawals := 80.0
 	totalWithdrawalsInSubunit := int(totalWithdrawals * domain.ToSubunitDelimeter)
 
@@ -130,7 +130,7 @@ func TestGetUserWithdrawalsSum_Success(t *testing.T) {
 func TestGetUserWithdrawalsSum_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(sum\\), 0\\) AS total_withdrawals FROM withdrawals").
 		WithArgs(userID).

@@ -7,7 +7,7 @@ import (
 func TestConvertToCurrency(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    int
+		input    int64
 		expected float64
 	}{
 		{"Zero value", 0, 0.0},
