@@ -6,7 +6,7 @@ type User struct {
 }
 
 type DBUser struct {
-	ID           int
+	ID           int64
 	Login        string
 	PasswordHash string
 }

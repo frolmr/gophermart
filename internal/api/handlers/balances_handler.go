@@ -3,15 +3,15 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/frolmr/gophermart/internal/domain"
+	"github.com/frolmr/gophermart/pkg/formatter"
 	"go.uber.org/zap"
 )
 
 type BalanceRepository interface {
-	GetUserCurrentBalance(userID int) (float64, error)
-	GetUserWithdrawalsSum(userID int) (float64, error)
+	GetUserCurrentBalance(userID int64) (float64, error)
+	GetUserWithdrawalsSum(userID int64) (float64, error)
 }
 
 type BalancesHandler struct {
@@ -28,29 +28,36 @@ func NewBalancesHandler(lgr *zap.SugaredLogger, repo BalanceRepository) *Balance
 
 func (bh *BalancesHandler) GetBalance(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", domain.JSONContentType)
-	userID, err := strconv.Atoi(req.Header.Get(domain.UserIDHeader))
+	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
-		http.Error(w, "Invalid user id", http.StatusInternalServerError)
+		writeJSONError(w, "Invalid user id", http.StatusInternalServerError)
 		return
 	}
 
 	balanceSum, err := bh.repo.GetUserCurrentBalance(userID)
 	if err != nil {
-		http.Error(w, "Failed to get user accrual sum", http.StatusInternalServerError)
+		writeJSONError(w, "Failed to get user accrual sum", http.StatusInternalServerError)
 		return
 	}
 
 	withdrawalSum, err := bh.repo.GetUserWithdrawalsSum(userID)
 	if err != nil {
-		http.Error(w, "Failed to get user withdrawal sum", http.StatusInternalServerError)
+		writeJSONError(w, "Failed to get user withdrawal sum", http.StatusInternalServerError)
 		return
 	}
 
-	var balance domain.Balance
-	balance.BalanceSum = balanceSum
-	balance.WithdrawalSum = withdrawalSum
+	balance := domain.Balance{
+		BalanceSum:    balanceSum,
+		WithdrawalSum: withdrawalSum,
+	}
 
 	if err := json.NewEncoder(w).Encode(balance); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", domain.JSONContentType)
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

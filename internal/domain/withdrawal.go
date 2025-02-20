@@ -9,9 +9,9 @@ type Withdrawal struct {
 }
 
 type DBWithdrawal struct {
-	ID          int
+	ID          int64
 	OrderNumber string
-	Sum         int
+	Sum         int64
 	ProcessedAt time.Time
-	UserID      int
+	UserID      int64
 }

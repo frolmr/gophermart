@@ -77,7 +77,7 @@ func TestCreateOrder_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
 	orderNumber := "12345678903"
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectExec("INSERT INTO orders").
 		WithArgs(orderNumber, userID).
@@ -93,7 +93,7 @@ func TestCreateOrder_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
 	orderNumber := "12345678903"
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectExec("INSERT INTO orders").
 		WithArgs(orderNumber, userID).
@@ -161,7 +161,7 @@ func TestGetAllUnprocessedOrders_DatabaseError(t *testing.T) {
 func TestGetAllUserOrders_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 	orders := []*domain.Order{
 		{Number: "12345678903", Status: "NEW", UploadedAt: time.Now()},
 		{Number: "98765432109", Status: "PROCESSED", UploadedAt: time.Now(), Accrual: func() *float64 { v := 50.0; return &v }()},
@@ -186,7 +186,7 @@ func TestGetAllUserOrders_Success(t *testing.T) {
 func TestGetAllUserOrders_NoOrders(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 	rows := sqlmock.NewRows([]string{"number", "status", "accrual", "uploaded_at"})
 
 	mock.ExpectPrepare("SELECT o.number, o.status, a.accrual, o.uploaded_at FROM orders o").
@@ -204,7 +204,7 @@ func TestGetAllUserOrders_NoOrders(t *testing.T) {
 func TestGetAllUserOrders_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	userID := 1
+	userID := int64(1)
 
 	mock.ExpectPrepare("SELECT o.number, o.status, a.accrual, o.uploaded_at FROM orders o").
 		ExpectQuery().
@@ -221,7 +221,7 @@ func TestGetAllUserOrders_DatabaseError(t *testing.T) {
 func TestUpdateOrderAccrualStatus_Success(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	orderID := 1
+	orderID := int64(1)
 	status := "PROCESSED"
 	accrual := 50.0
 	accrualInSubunit := formatter.ConvertToSubunit(accrual)
@@ -244,7 +244,7 @@ func TestUpdateOrderAccrualStatus_Success(t *testing.T) {
 func TestUpdateOrderAccrualStatus_NoAccrual(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	orderID := 1
+	orderID := int64(1)
 	status := "PROCESSED"
 
 	mock.ExpectBegin()
@@ -262,7 +262,7 @@ func TestUpdateOrderAccrualStatus_NoAccrual(t *testing.T) {
 func TestUpdateOrderAccrualStatus_DatabaseError(t *testing.T) {
 	storage, mock := NewMockStorage(t)
 
-	orderID := 1
+	orderID := int64(1)
 	status := "PROCESSED"
 	accrual := 50.0
 

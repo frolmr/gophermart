@@ -16,7 +16,7 @@ services:
   accrual:
     build:
       context: .
-      dockerfile: Dockerfile.accrual
+      dockerfile: deploy/Dockerfile.accrual
     container_name: accrual
     environment:
       - ACCRUAL_RUN_ADDRESS=${ACCRUAL_RUN_ADDRESS}
@@ -29,7 +29,7 @@ services:
   gophermart:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
     container_name: gophermart
     environment:
       - RUN_ADDRESS=${RUN_ADDRESS}
@@ -46,7 +46,7 @@ services:
   swissknife:
     build:
       context: .
-      dockerfile: Dockerfile.swissknife
+      dockerfile: deploy/Dockerfile.swissknife
     container_name: swissknife
     depends_on:
       - accrual

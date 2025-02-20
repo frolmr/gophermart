@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/frolmr/gophermart/internal/config"
@@ -8,11 +9,11 @@ import (
 )
 
 type Claims struct {
-	UserID int `json:"user_id"`
+	UserID int64 `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
-func GenerateJWT(userID int, authConf *config.AuthConfig) (string, error) {
+func GenerateJWT(userID int64, authConf *config.AuthConfig) (string, error) {
 	expirationTime := time.Now().Add(authConf.JWTExpiresIn)
 
 	claims := &Claims{
@@ -25,7 +26,7 @@ func GenerateJWT(userID int, authConf *config.AuthConfig) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(authConf.JWTKey)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error signing: %w", err)
 	}
 
 	return tokenString, nil

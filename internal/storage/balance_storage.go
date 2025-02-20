@@ -1,8 +1,12 @@
 package storage
 
-import "github.com/frolmr/gophermart/pkg/formatter"
+import (
+	"fmt"
 
-func (s *Storage) GetUserCurrentBalance(userID int) (float64, error) {
+	"github.com/frolmr/gophermart/pkg/formatter"
+)
+
+func (s *Storage) GetUserCurrentBalance(userID int64) (float64, error) {
 	query := `
             WITH accruals_cte AS (
                 SELECT COALESCE(SUM(a.accrual), 0) AS total_accruals
@@ -20,11 +24,11 @@ func (s *Storage) GetUserCurrentBalance(userID int) (float64, error) {
             FROM
                 accruals_cte, withdrawals_cte;`
 
-	var total int
+	var total int64
 	err := s.db.QueryRow(query, userID).Scan(&total)
 	if err != nil {
 		s.logger.Errorf("Balance calculation fail for user_id: %s, err: %s", userID, err.Error())
-		return 0, err
+		return 0, fmt.Errorf("error getting balance: %w", err)
 	}
 
 	return formatter.ConvertToCurrency(total), nil

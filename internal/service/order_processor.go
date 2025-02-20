@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -16,16 +15,16 @@ const (
 
 type OrdersRepository interface {
 	GetAllUnprocessedOrders() ([]*domain.DBOrder, error)
-	UpdateOrderAccrualStatus(id int, status string, accrual *float64) error
+	UpdateOrderAccrualStatus(id int64, status string, accrual *float64) error
 }
 
 type OrderProcessor struct {
 	logger *zap.SugaredLogger
 	repo   OrdersRepository
-	client *client.AccrualClient
+	client client.AccrualClientInterface
 }
 
-func NewOrderProcessor(lgr *zap.SugaredLogger, repo OrdersRepository, client *client.AccrualClient) *OrderProcessor {
+func NewOrderProcessor(lgr *zap.SugaredLogger, repo OrdersRepository, client client.AccrualClientInterface) *OrderProcessor {
 	return &OrderProcessor{
 		logger: lgr,
 		repo:   repo,
@@ -76,10 +75,8 @@ func (op *OrderProcessor) processUnprocessedOrders() error {
 }
 
 func (op *OrderProcessor) processOrder(order *domain.DBOrder) error {
-	accrualOrder, retryAfter, err := op.client.RequestOrderState(order.Number)
-	if errors.Is(err, client.ErrTooManyRequests) {
-		time.Sleep(retryAfter)
-	} else if err != nil {
+	accrualOrder, err := op.client.RequestOrderState(order.Number)
+	if err != nil {
 		return err
 	}
 

@@ -10,11 +10,11 @@ type Order struct {
 }
 
 type DBOrder struct {
-	ID         int
+	ID         int64
 	Number     string
 	Status     string
 	UploadedAt time.Time
-	UserID     int
+	UserID     int64
 }
 
 type AccrualOrder struct {

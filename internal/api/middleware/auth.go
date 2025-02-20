@@ -2,11 +2,11 @@ package middleware
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/frolmr/gophermart/internal/api/auth"
 	"github.com/frolmr/gophermart/internal/config"
 	"github.com/frolmr/gophermart/internal/domain"
+	"github.com/frolmr/gophermart/pkg/formatter"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -31,7 +31,7 @@ func WithAuth(authCfg *config.AuthConfig) func(next http.Handler) http.Handler {
 				return
 			}
 
-			req.Header.Set(domain.UserIDHeader, strconv.Itoa(claims.UserID))
+			req.Header.Set(domain.UserIDHeader, formatter.Int64ToString(claims.UserID))
 			next.ServeHTTP(w, req)
 		}
 

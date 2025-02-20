@@ -2,160 +2,166 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
+	"time"
 
 	"github.com/frolmr/gophermart/internal/domain"
 	"github.com/frolmr/gophermart/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 )
 
-func TestLoadOrder_Success(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{
-		FindOrderByNumberFunc: func(number string) (*domain.DBOrder, error) {
-			return nil, nil
-		},
-		CreateOrderFunc: func(number string, userID int) error {
-			return nil
-		},
-	}
+func TestOrdersHandler_LoadOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
+	mockRepo := mocks.NewMockOrdersRepository(ctrl)
 	logger := zap.NewNop().Sugar()
 	handler := NewOrdersHandler(logger, mockRepo)
 
-	orderNumber := "12345678903"
-	req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewBufferString(orderNumber))
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
+	tests := []struct {
+		name           string
+		orderNumber    string
+		userID         string
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:        "Successful order upload",
+			orderNumber: "12345678903",
+			userID:      "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					FindOrderByNumber("12345678903").
+					Return(nil, nil)
 
-	rr := httptest.NewRecorder()
-
-	handler.LoadOrder(rr, req)
-
-	assert.Equal(t, http.StatusAccepted, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Order uploaded")
-}
-
-func TestLoadOrder_InvalidOrderNumber(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{}
-
-	logger := zap.NewNop().Sugar()
-	handler := NewOrdersHandler(logger, mockRepo)
-
-	orderNumber := "12345678902"
-	req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewBufferString(orderNumber))
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
-
-	rr := httptest.NewRecorder()
-
-	handler.LoadOrder(rr, req)
-
-	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Order number is invalid")
-}
-
-func TestLoadOrder_OrderAlreadyExists(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{
-		FindOrderByNumberFunc: func(number string) (*domain.DBOrder, error) {
-			return &domain.DBOrder{
-				Number: "12345678903",
-				UserID: 123,
-			}, nil
+				mockRepo.EXPECT().
+					CreateOrder("12345678903", int64(1)).
+					Return(nil)
+			},
+			expectedStatus: http.StatusAccepted,
+			expectedBody:   "Order uploaded",
 		},
-	}
-
-	logger := zap.NewNop().Sugar()
-	handler := NewOrdersHandler(logger, mockRepo)
-
-	orderNumber := "12345678903"
-	req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewBufferString(orderNumber))
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
-
-	rr := httptest.NewRecorder()
-
-	handler.LoadOrder(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-}
-
-func TestLoadOrder_OrderAlreadyExistsForAnotherUser(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{
-		FindOrderByNumberFunc: func(number string) (*domain.DBOrder, error) {
-			return &domain.DBOrder{
-				Number: "12345678903",
-				UserID: 456,
-			}, nil
+		{
+			name:        "Order already uploaded by the same user",
+			orderNumber: "12345678903",
+			userID:      "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					FindOrderByNumber("12345678903").
+					Return(&domain.DBOrder{UserID: 1}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "",
+		},
+		{
+			name:        "Order already uploaded by another user",
+			orderNumber: "12345678903",
+			userID:      "2",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					FindOrderByNumber("12345678903").
+					Return(&domain.DBOrder{UserID: 1}, nil)
+			},
+			expectedStatus: http.StatusConflict,
+			expectedBody:   "Already downloaded",
+		},
+		{
+			name:           "Invalid order number (Luhn check fails)",
+			orderNumber:    "12345678902",
+			userID:         "1",
+			mockSetup:      func() {},
+			expectedStatus: http.StatusUnprocessableEntity,
+			expectedBody:   "Order number is invalid",
 		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewReader([]byte(tt.orderNumber)))
+			req.Header.Set(domain.UserIDHeader, tt.userID)
+			w := httptest.NewRecorder()
+
+			handler.LoadOrder(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if tt.expectedBody != "" {
+				assert.Contains(t, w.Body.String(), tt.expectedBody)
+			}
+		})
+	}
+}
+
+func TestOrdersHandler_GetOrders(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockOrdersRepository(ctrl)
 	logger := zap.NewNop().Sugar()
 	handler := NewOrdersHandler(logger, mockRepo)
 
-	orderNumber := "12345678903"
-	req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewBufferString(orderNumber))
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
-
-	rr := httptest.NewRecorder()
-
-	handler.LoadOrder(rr, req)
-
-	assert.Equal(t, http.StatusConflict, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Already downloaded")
-}
-
-func TestGetOrders_Success(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{
-		GetAllUserOrdersFunc: func(userID int) ([]*domain.Order, error) {
-			return []*domain.Order{
-				{Number: "12345678903", Status: "PROCESSED"},
-				{Number: "98765432109", Status: "NEW"},
-			}, nil
+	tests := []struct {
+		name           string
+		userID         string
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:   "Successful retrieval of orders",
+			userID: "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetAllUserOrders(int64(1)).
+					Return([]*domain.Order{
+						{Number: "12345678903", Status: "PROCESSED", UploadedAt: time.Now()},
+						{Number: "98765432103", Status: "NEW", UploadedAt: time.Now()},
+					}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   `[{"number":"12345678903","status":"PROCESSED","uploaded_at":"`,
+		},
+		{
+			name:   "No orders found",
+			userID: "1",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetAllUserOrders(int64(1)).
+					Return([]*domain.Order{}, nil)
+			},
+			expectedStatus: http.StatusNoContent,
+			expectedBody:   "",
+		},
+		{
+			name:   "Invalid user ID",
+			userID: "invalid",
+			mockSetup: func() {
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   "Invalid user id",
 		},
 	}
 
-	logger := zap.NewNop().Sugar()
-	handler := NewOrdersHandler(logger, mockRepo)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
 
-	req := httptest.NewRequest(http.MethodGet, "/orders", nil)
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
+			req := httptest.NewRequest(http.MethodGet, "/orders", nil)
+			req.Header.Set(domain.UserIDHeader, tt.userID)
+			w := httptest.NewRecorder()
 
-	rr := httptest.NewRecorder()
+			handler.GetOrders(w, req)
 
-	handler.GetOrders(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-
-	var orders []*domain.Order
-	err := json.NewDecoder(rr.Body).Decode(&orders)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 2, len(orders))
-}
-
-func TestGetOrders_NoOrders(t *testing.T) {
-	mockRepo := &mocks.MockOrdersRepository{
-		GetAllUserOrdersFunc: func(userID int) ([]*domain.Order, error) {
-			return []*domain.Order{}, nil
-		},
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if tt.expectedBody != "" {
+				assert.Contains(t, w.Body.String(), tt.expectedBody)
+			}
+		})
 	}
-
-	logger := zap.NewNop().Sugar()
-	handler := NewOrdersHandler(logger, mockRepo)
-
-	req := httptest.NewRequest(http.MethodGet, "/orders", nil)
-	userID := 123
-	req.Header.Set(domain.UserIDHeader, strconv.Itoa(userID))
-
-	rr := httptest.NewRecorder()
-
-	handler.GetOrders(rr, req)
-	assert.Equal(t, http.StatusNoContent, rr.Code)
 }

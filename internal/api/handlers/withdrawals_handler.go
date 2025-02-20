@@ -3,17 +3,17 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/frolmr/gophermart/internal/domain"
+	"github.com/frolmr/gophermart/pkg/formatter"
 	"github.com/frolmr/gophermart/pkg/luhn"
 	"go.uber.org/zap"
 )
 
 type WithdrawalRepository interface {
-	CreateWithdrawal(orderNumber string, sum float64, userID int) error
-	GetUserCurrentBalance(userID int) (float64, error)
-	GetAllUserWithdrawals(userID int) ([]*domain.Withdrawal, error)
+	CreateWithdrawal(orderNumber string, sum float64, userID int64) error
+	GetUserCurrentBalance(userID int64) (float64, error)
+	GetAllUserWithdrawals(userID int64) ([]*domain.Withdrawal, error)
 }
 
 type WithdrawalsHandler struct {
@@ -46,7 +46,7 @@ func (wh *WithdrawalsHandler) RegisterWithdrawal(w http.ResponseWriter, req *htt
 		return
 	}
 
-	userID, err := strconv.Atoi(req.Header.Get(domain.UserIDHeader))
+	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
 		http.Error(w, "Invalid user id", http.StatusInternalServerError)
 		return
@@ -74,7 +74,7 @@ func (wh *WithdrawalsHandler) RegisterWithdrawal(w http.ResponseWriter, req *htt
 //nolint:dupl // Actually code is not the same as in ordes_handler. United code will be more difficult to understand
 func (wh *WithdrawalsHandler) GetWithdrawals(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", domain.JSONContentType)
-	userID, err := strconv.Atoi(req.Header.Get(domain.UserIDHeader))
+	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
 		http.Error(w, "Invalid user id", http.StatusInternalServerError)
 		return
