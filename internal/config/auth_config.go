@@ -10,14 +10,16 @@ import (
 )
 
 type AuthConfig struct {
-	JWTKey       []byte
-	JWTExpiresIn time.Duration
+	JWTKey                   []byte
+	JWTAccessTokenExpiresIn  time.Duration
+	JWTRefreshTokenExpiresIn time.Duration
 }
 
 const (
-	jwtKeyEnvName   = "JWT_SECRET"
-	jwtExpiresIn    = 24 * time.Hour
-	jwtSecureLength = 32
+	jwtKeyEnvName         = "JWT_SECRET"
+	jwtAccessTokenExpiry  = 15 * time.Minute
+	jwtRefreshTokenExpiry = 24 * time.Hour
+	jwtSecureLength       = 32
 )
 
 var (
@@ -36,8 +38,9 @@ func NewAuthConfig() (*AuthConfig, error) {
 	}
 
 	return &AuthConfig{
-		JWTKey:       []byte(jwtSecret),
-		JWTExpiresIn: jwtExpiresIn,
+		JWTKey:                   []byte(jwtSecret),
+		JWTAccessTokenExpiresIn:  jwtAccessTokenExpiry,
+		JWTRefreshTokenExpiresIn: jwtRefreshTokenExpiry,
 	}, nil
 }
 

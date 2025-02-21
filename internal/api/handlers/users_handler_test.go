@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,6 +47,10 @@ func TestUsersHandler_RegisterUser(t *testing.T) {
 				mockRepo.EXPECT().
 					CreateAndReturnUser("testuser", gomock.Any()).
 					Return(&domain.DBUser{ID: 1, Login: "testuser"}, nil)
+
+				mockRepo.EXPECT().
+					StoreRefreshToken(int64(1), gomock.Any(), gomock.Any()).
+					Return(nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   "User created successfully",
@@ -74,7 +79,13 @@ func TestUsersHandler_RegisterUser(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			handler.RegisterUser(&config.AuthConfig{JWTExpiresIn: time.Hour}).ServeHTTP(w, req)
+			authConfig := &config.AuthConfig{
+				JWTKey:                   []byte("secret"),
+				JWTAccessTokenExpiresIn:  time.Hour,
+				JWTRefreshTokenExpiresIn: time.Hour,
+			}
+
+			handler.RegisterUser(authConfig).ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			assert.Contains(t, w.Body.String(), tt.expectedBody)
@@ -87,9 +98,7 @@ func TestUsersHandler_LoginUser(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockUsersRepository(ctrl)
-
 	logger := zap.NewNop().Sugar()
-
 	handler := NewUsersHandler(logger, mockRepo)
 
 	tests := []struct {
@@ -110,6 +119,10 @@ func TestUsersHandler_LoginUser(t *testing.T) {
 				mockRepo.EXPECT().
 					GetUserByLogin("testuser").
 					Return(&domain.DBUser{ID: 1, Login: "testuser", PasswordHash: string(hashedPassword)}, nil)
+
+				mockRepo.EXPECT().
+					StoreRefreshToken(int64(1), gomock.Any(), gomock.Any()).
+					Return(nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   "Login successful",
@@ -139,7 +152,106 @@ func TestUsersHandler_LoginUser(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			handler.LoginUser(&config.AuthConfig{JWTExpiresIn: time.Hour}).ServeHTTP(w, req)
+			authConfig := &config.AuthConfig{
+				JWTKey:                   []byte("secret"),
+				JWTAccessTokenExpiresIn:  time.Hour,
+				JWTRefreshTokenExpiresIn: time.Hour,
+			}
+
+			handler.LoginUser(authConfig).ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tt.expectedBody)
+		})
+	}
+}
+
+func TestUsersHandler_RefreshToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mocks.NewMockUsersRepository(ctrl)
+	logger := zap.NewNop().Sugar()
+	handler := NewUsersHandler(logger, mockRepo)
+
+	authConfig := &config.AuthConfig{
+		JWTKey:                   []byte("secret"),
+		JWTAccessTokenExpiresIn:  15 * time.Minute,
+		JWTRefreshTokenExpiresIn: 24 * time.Hour,
+	}
+
+	tests := []struct {
+		name           string
+		refreshToken   string
+		mockSetup      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:         "Successful token refresh",
+			refreshToken: "valid-refresh-token",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetRefreshToken("valid-refresh-token").
+					Return(&domain.RefreshToken{
+						ID:        1,
+						UserID:    1,
+						Token:     "valid-refresh-token",
+						ExpiresAt: time.Now().Add(time.Hour),
+					}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "Token refreshed successfully",
+		},
+		{
+			name:         "Invalid refresh token",
+			refreshToken: "invalid-refresh-token",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetRefreshToken("invalid-refresh-token").
+					Return(nil, nil)
+			},
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Refresh token is expired or invalid",
+		},
+		{
+			name:         "Expired refresh token",
+			refreshToken: "expired-refresh-token",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetRefreshToken("expired-refresh-token").
+					Return(&domain.RefreshToken{
+						ID:        1,
+						UserID:    1,
+						Token:     "expired-refresh-token",
+						ExpiresAt: time.Now().Add(-time.Hour),
+					}, nil)
+			},
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Refresh token is expired or invalid",
+		},
+		{
+			name:         "Database error",
+			refreshToken: "valid-refresh-token",
+			mockSetup: func() {
+				mockRepo.EXPECT().
+					GetRefreshToken("valid-refresh-token").
+					Return(nil, errors.New("database error"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   "Database error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			req := httptest.NewRequest(http.MethodPost, "/refresh", nil)
+			req.AddCookie(&http.Cookie{Name: "refresh_token", Value: tt.refreshToken})
+			w := httptest.NewRecorder()
+
+			handler.RefreshToken(authConfig).ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			assert.Contains(t, w.Body.String(), tt.expectedBody)

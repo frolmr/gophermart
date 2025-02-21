@@ -15,6 +15,8 @@ import (
 type UsersRepository interface {
 	CreateAndReturnUser(login, password string) (*domain.DBUser, error)
 	GetUserByLogin(login string) (*domain.DBUser, error)
+	StoreRefreshToken(userID int64, token string, expiresAt time.Time) error
+	GetRefreshToken(token string) (*domain.RefreshToken, error)
 }
 
 type UsersHandler struct {
@@ -60,16 +62,36 @@ func (uh *UsersHandler) RegisterUser(authConfig *config.AuthConfig) http.Handler
 			return
 		}
 
-		tokenString, err := auth.GenerateJWT(dbUser.ID, authConfig)
+		accessToken, err := auth.GenerateAccessToken(dbUser.ID, authConfig)
 		if err != nil {
-			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
+			return
+		}
+
+		refreshToken, err := auth.GenerateRefreshToken(dbUser.ID, authConfig)
+		if err != nil {
+			http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
+			return
+		}
+
+		err = uh.repo.StoreRefreshToken(dbUser.ID, refreshToken, time.Now().Add(authConfig.JWTRefreshTokenExpiresIn))
+		if err != nil {
+			http.Error(w, "Failed to store refresh token", http.StatusInternalServerError)
 			return
 		}
 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "access_token",
-			Value:    tokenString,
-			Expires:  time.Now().Add(authConfig.JWTExpiresIn),
+			Value:    accessToken,
+			Expires:  time.Now().Add(authConfig.JWTAccessTokenExpiresIn),
+			HttpOnly: true,
+			Path:     "/",
+		})
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    refreshToken,
+			Expires:  time.Now().Add(authConfig.JWTRefreshTokenExpiresIn),
 			HttpOnly: true,
 			Path:     "/",
 		})
@@ -108,20 +130,77 @@ func (uh *UsersHandler) LoginUser(authConfig *config.AuthConfig) http.HandlerFun
 			return
 		}
 
-		tokenString, err := auth.GenerateJWT(dbUser.ID, authConfig)
+		accessToken, err := auth.GenerateAccessToken(dbUser.ID, authConfig)
 		if err != nil {
-			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
+			return
+		}
+
+		refreshToken, err := auth.GenerateRefreshToken(dbUser.ID, authConfig)
+		if err != nil {
+			http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
+			return
+		}
+
+		err = uh.repo.StoreRefreshToken(dbUser.ID, refreshToken, time.Now().Add(authConfig.JWTRefreshTokenExpiresIn))
+		if err != nil {
+			http.Error(w, "Failed to store refresh token", http.StatusInternalServerError)
 			return
 		}
 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "access_token",
-			Value:    tokenString,
-			Expires:  time.Now().Add(authConfig.JWTExpiresIn),
+			Value:    accessToken,
+			Expires:  time.Now().Add(authConfig.JWTAccessTokenExpiresIn),
+			HttpOnly: true,
+			Path:     "/",
+		})
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    refreshToken,
+			Expires:  time.Now().Add(authConfig.JWTRefreshTokenExpiresIn),
 			HttpOnly: true,
 			Path:     "/",
 		})
 
 		_, _ = w.Write([]byte("Login successful"))
+	}
+}
+
+func (uh *UsersHandler) RefreshToken(authConfig *config.AuthConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		cookie, err := req.Cookie("refresh_token")
+		if err != nil {
+			http.Error(w, "Refresh token is required", http.StatusBadRequest)
+			return
+		}
+
+		refreshToken, err := uh.repo.GetRefreshToken(cookie.Value)
+		if err != nil {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+
+		if refreshToken == nil || refreshToken.ExpiresAt.Before(time.Now()) {
+			http.Error(w, "Refresh token is expired or invalid", http.StatusUnauthorized)
+			return
+		}
+
+		accessToken, err := auth.GenerateAccessToken(refreshToken.UserID, authConfig)
+		if err != nil {
+			http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "access_token",
+			Value:    accessToken,
+			Expires:  time.Now().Add(authConfig.JWTAccessTokenExpiresIn),
+			HttpOnly: true,
+			Path:     "/",
+		})
+
+		_, _ = w.Write([]byte("Token refreshed successfully"))
 	}
 }

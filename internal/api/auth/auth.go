@@ -13,9 +13,19 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateJWT(userID int64, authConf *config.AuthConfig) (string, error) {
-	expirationTime := time.Now().Add(authConf.JWTExpiresIn)
+func GenerateAccessToken(userID int64, authConf *config.AuthConfig) (string, error) {
+	expirationTime := time.Now().Add(authConf.JWTAccessTokenExpiresIn)
 
+	return generateToken(userID, expirationTime, authConf.JWTKey)
+}
+
+func GenerateRefreshToken(userID int64, authConf *config.AuthConfig) (string, error) {
+	expirationTime := time.Now().Add(authConf.JWTRefreshTokenExpiresIn)
+
+	return generateToken(userID, expirationTime, authConf.JWTKey)
+}
+
+func generateToken(userID int64, expirationTime time.Time, key []byte) (string, error) {
 	claims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -24,7 +34,7 @@ func GenerateJWT(userID int64, authConf *config.AuthConfig) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(authConf.JWTKey)
+	tokenString, err := token.SignedString(key)
 	if err != nil {
 		return "", fmt.Errorf("error signing: %w", err)
 	}

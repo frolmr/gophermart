@@ -42,6 +42,7 @@ func (c *Controller) SetupRouter(lgr *zap.SugaredLogger) chi.Router {
 		r.Use(middleware.AllowContentType(domain.JSONContentType))
 		r.Post("/register", rh.UsersHandler.RegisterUser(c.AuthConfig))
 		r.Post("/login", rh.UsersHandler.LoginUser(c.AuthConfig))
+		r.Post("/refresh", rh.UsersHandler.RefreshToken(c.AuthConfig))
 	})
 
 	r.Route("/api/user/orders", func(r chi.Router) {

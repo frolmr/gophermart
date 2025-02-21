@@ -30,19 +30,19 @@ func (bh *BalancesHandler) GetBalance(w http.ResponseWriter, req *http.Request) 
 	w.Header().Set("Content-Type", domain.JSONContentType)
 	userID, err := formatter.StringToInt64(req.Header.Get(domain.UserIDHeader))
 	if err != nil {
-		writeJSONError(w, "Invalid user id", http.StatusInternalServerError)
+		writeJSONError(w, "Invalid user id")
 		return
 	}
 
 	balanceSum, err := bh.repo.GetUserCurrentBalance(userID)
 	if err != nil {
-		writeJSONError(w, "Failed to get user accrual sum", http.StatusInternalServerError)
+		writeJSONError(w, "Failed to get user accrual sum")
 		return
 	}
 
 	withdrawalSum, err := bh.repo.GetUserWithdrawalsSum(userID)
 	if err != nil {
-		writeJSONError(w, "Failed to get user withdrawal sum", http.StatusInternalServerError)
+		writeJSONError(w, "Failed to get user withdrawal sum")
 		return
 	}
 
@@ -52,12 +52,12 @@ func (bh *BalancesHandler) GetBalance(w http.ResponseWriter, req *http.Request) 
 	}
 
 	if err := json.NewEncoder(w).Encode(balance); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		writeJSONError(w, "Failed to encode response")
 	}
 }
 
-func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
+func writeJSONError(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", domain.JSONContentType)
-	w.WriteHeader(statusCode)
+	w.WriteHeader(http.StatusInternalServerError)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

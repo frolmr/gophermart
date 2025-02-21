@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/frolmr/gophermart/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -137,5 +139,127 @@ func TestGetUserByLogin_DatabaseError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, user)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStoreRefreshToken_Success(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	userID := int64(1)
+	token := "valid-refresh-token"
+	expiresAt := time.Now().Add(time.Hour)
+
+	mock.ExpectExec("INSERT INTO refresh_tokens").
+		WithArgs(userID, token, expiresAt).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := storage.StoreRefreshToken(userID, token, expiresAt)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStoreRefreshToken_DatabaseError(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	userID := int64(1)
+	token := "valid-refresh-token"
+	expiresAt := time.Now().Add(time.Hour)
+
+	mock.ExpectExec("INSERT INTO refresh_tokens").
+		WithArgs(userID, token, expiresAt).
+		WillReturnError(errors.New("database error"))
+
+	err := storage.StoreRefreshToken(userID, token, expiresAt)
+
+	assert.Error(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetRefreshToken_Success(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	token := "valid-refresh-token"
+	refreshToken := &domain.RefreshToken{
+		ID:        1,
+		UserID:    1,
+		Token:     token,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+
+	mock.ExpectPrepare("SELECT id, user_id, token, expires_at FROM refresh_tokens WHERE token = \\$1").
+		ExpectQuery().
+		WithArgs(token).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "token", "expires_at"}).
+			AddRow(refreshToken.ID, refreshToken.UserID, refreshToken.Token, refreshToken.ExpiresAt))
+
+	result, err := storage.GetRefreshToken(token)
+
+	assert.NoError(t, err)
+	assert.Equal(t, refreshToken, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetRefreshToken_NotFound(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	token := "invalid-refresh-token"
+
+	mock.ExpectPrepare("SELECT id, user_id, token, expires_at FROM refresh_tokens WHERE token = \\$1").
+		ExpectQuery().
+		WithArgs(token).
+		WillReturnError(sql.ErrNoRows)
+
+	result, err := storage.GetRefreshToken(token)
+
+	assert.NoError(t, err)
+	assert.Nil(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetRefreshToken_DatabaseError(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	token := "invalid-refresh-token"
+
+	mock.ExpectPrepare("SELECT id, user_id, token, expires_at FROM refresh_tokens WHERE token = \\$1").
+		ExpectQuery().
+		WithArgs(token).
+		WillReturnError(errors.New("database error"))
+
+	result, err := storage.GetRefreshToken(token)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteRefreshToken_Success(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	token := "valid-refresh-token"
+
+	mock.ExpectExec("DELETE FROM refresh_tokens").
+		WithArgs(token).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := storage.DeleteRefreshToken(token)
+
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteRefreshToken_DatabaseError(t *testing.T) {
+	storage, mock := NewMockStorage(t)
+
+	token := "invalid-refresh-token"
+
+	mock.ExpectExec("DELETE FROM refresh_tokens").
+		WithArgs(token).
+		WillReturnError(errors.New("database error"))
+
+	err := storage.DeleteRefreshToken(token)
+
+	assert.Error(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
